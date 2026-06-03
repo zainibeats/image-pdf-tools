@@ -96,13 +96,17 @@ python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf
 
 # Raise PDF file-size limit
 python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --max-pdf-mb 50
+
+# Intentionally rewrite an owner-restricted PDF as unrestricted output
+python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --allow-unrestricted-output
 ```
 
 _Existing output files are not replaced unless `--overwrite` is passed._
 
-> **Note**: The append script can handle unencrypted PDFs and owner-restricted PDFs that
-open with an empty password. PDFs that require a user password are not
-supported.
+> **Note**: The append script can handle unencrypted PDFs by default. Owner-restricted
+PDFs that open with an empty password require `--allow-unrestricted-output`,
+because the output PDF will not preserve the original encryption or permission
+restrictions. PDFs that require a user password are not supported.
 
 ## Behavior
 
@@ -117,6 +121,9 @@ supported.
 - With 2 images, the grid is 2 rows by 1 column, so the output is portrait-oriented.
 - `append-image-page.py` keeps the image aspect ratio and centers it on a white
   US Letter page.
+- `append-image-page.py` preserves source pages and simple string metadata, but
+  it does not preserve encryption, permission restrictions, signatures, forms,
+  outlines, attachments, document-level JavaScript, or tagged-PDF structure.
 - The scripts fail when inputs exceed configured safety limits. Use
   `--max-images`, `--max-image-pixels`, `--max-output-pixels`, or
   `--max-pdf-pages` to raise a limit for larger inputs. Use `--max-pdf-mb` to

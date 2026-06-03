@@ -44,9 +44,11 @@ Progress: Both atomic write helpers now make the final publish step honor `--ove
 
 ## 6. PDF output can silently drop security restrictions and document structure
 
-`append-image-page.py` decrypts owner-restricted PDFs with an empty password when possible (`append-image-page.py:214-229`), then writes a new PDF with pages and simple string metadata only (`append-image-page.py:261-275`). It does not preserve encryption, permission restrictions, signatures, forms, outlines, attachments, document-level JavaScript, tagged-PDF structure, or other catalog-level features.
+`append-image-page.py` can decrypt owner-restricted PDFs with an empty password when explicitly allowed (`append-image-page.py:292-324`), then writes a new PDF with pages and simple string metadata only (`append-image-page.py:358-373`). It does not preserve encryption, permission restrictions, signatures, forms, outlines, attachments, document-level JavaScript, tagged-PDF structure, or other catalog-level features.
 
 In production, the resulting PDF may no longer meet the same compliance, accessibility, workflow, or security expectations as the input PDF. The largest risk is that an owner-restricted PDF can become an unrestricted output PDF without an explicit user warning.
+
+Progress: `append-image-page.py` now refuses encrypted or owner-restricted input PDFs by default because the output writer cannot preserve encryption or permission restrictions. Users must pass `--allow-unrestricted-output` to intentionally create an unrestricted output from an owner-restricted PDF, and the script prints a stderr warning when doing so. The README now documents that the append workflow preserves source pages and simple string metadata only; signatures, forms, outlines, attachments, document-level JavaScript, tagged-PDF structure, encryption, and permission restrictions are not preserved.
 
 ## 7. Output paths can target sensitive or unintended locations too easily
 

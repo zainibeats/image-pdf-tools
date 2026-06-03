@@ -39,6 +39,17 @@ class BytesImage:
         file_obj.write(self.data)
 
 
+class EmptyPasswordEncryptedReader:
+    is_encrypted = True
+
+    def __init__(self) -> None:
+        self.decrypt_calls: list[str] = []
+
+    def decrypt(self, password: str) -> int:
+        self.decrypt_calls.append(password)
+        return 1
+
+
 class AtomicWriteTests(unittest.TestCase):
     def test_pdf_write_without_overwrite_refuses_existing_destination(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -97,6 +108,32 @@ class AtomicWriteTests(unittest.TestCase):
             )
 
             self.assertEqual(destination.read_bytes(), b"new")
+
+    def test_encrypted_pdf_requires_explicit_unrestricted_output_consent(self) -> None:
+        reader = EmptyPasswordEncryptedReader()
+
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            append_image_page.decrypt_reader_if_needed(
+                reader,
+                Path("restricted.pdf"),
+                allow_unrestricted_output=False,
+            )
+
+        self.assertEqual(reader.decrypt_calls, [])
+
+    def test_encrypted_pdf_consent_warns_about_lost_restrictions(self) -> None:
+        reader = EmptyPasswordEncryptedReader()
+        stderr = io.StringIO()
+
+        with redirect_stderr(stderr):
+            append_image_page.decrypt_reader_if_needed(
+                reader,
+                Path("restricted.pdf"),
+                allow_unrestricted_output=True,
+            )
+
+        self.assertEqual(reader.decrypt_calls, [""])
+        self.assertIn("will not preserve input encryption", stderr.getvalue())
 
 
 if __name__ == "__main__":
