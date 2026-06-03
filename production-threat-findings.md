@@ -16,11 +16,15 @@ Progress: `append-image-page.py` now enforces a pre-parse `--max-pdf-mb` limit, 
 
 In production, users on lower-memory Windows, macOS, or Linux machines may see the script terminate, freeze, or be killed by the OS during ordinary supported use. The same risk exists in `append-image-page.py` when large images are converted, resized, and pasted into a PDF page (`append-image-page.py:164-188`), especially if users raise `--dpi` or `--max-image-pixels`.
 
+Progress: `make-image-grid.py` now defaults to 24 images and a 50,000,000-pixel output ceiling, validates the JPG output suffix before allocating the canvas, leaves JPEG `optimize` off unless `--optimize` is passed, and asks Pillow to draft-decode large JPEG inputs near their final cell size before resizing. `append-image-page.py` now checks the original image pixel count, draft-decodes large JPEG inputs near the target page size, and thumbnails before RGB conversion/compositing. Users can still opt into higher memory use with larger limits, higher DPI, or `--optimize`.
+
 ## 3. One corrupt, unsupported, or partially synced image aborts the entire grid job
 
 `make-image-grid.py` collects files by extension, then fails the whole run when any selected file cannot be decoded (`make-image-grid.py:147-157`, `make-image-grid.py:247-255`). This includes corrupted files, cloud-storage placeholders, partially copied images, phone export artifacts with a supported extension but unsupported encoding, or images being written while the script is running.
 
 In production, a single bad file in a user-selected folder prevents all other valid images from being processed. For non-technical users, the failure can be difficult to resolve because the script does not quarantine bad inputs, continue with valid images, or produce a preflight report of all failing files.
+
+Progress: `make-image-grid.py` now preflights selected inputs before allocating the grid, skips unreadable or unsupported-by-decoder files with stderr warnings, continues with the readable images, and prints a skipped count in the final summary. The script still fails if no readable images remain, and configured safety-limit violations such as `--max-image-pixels` remain hard stops.
 
 ## 4. Atomic replacement is not durable across power loss or OS crash
 

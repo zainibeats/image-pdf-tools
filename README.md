@@ -10,7 +10,7 @@ Original images and PDFs are always preserved.
 ## Tools
 
 - `make-image-grid.py`: combines HEIC, HEIF, JPG, JPEG, and PNG images into one
-  balanced JPG grid. Default image limit is 40. 
+  balanced JPG grid. Default image limit is 24.
 - `append-image-page.py`: appends a JPG/JPEG image as a US Letter page at the
   end of an existing PDF. Default input PDF limits are 10 pages and 25 MiB. 
 
@@ -80,6 +80,9 @@ python make-image-grid.py ~/Pictures/images -o ~/Desktop/image-grid.jpg
 
 # Raise the batch limit for a larger image set:
 python make-image-grid.py ~/Pictures/images --max-images 60
+
+# Raise the output pixel limit for larger cells or batches:
+python make-image-grid.py ~/Pictures/images --max-output-pixels 100000000
 ```
 
 **Append Image to PDF:**
@@ -103,10 +106,14 @@ supported.
 
 ## Behavior
 
-- `make-image-grid.py` accepts `.heic`, `.heif`, `.jpg`, `.jpeg`, and `.png` images up to the default safety limit of 40 images.
+- `make-image-grid.py` accepts `.heic`, `.heif`, `.jpg`, `.jpeg`, and `.png` images up to the default safety limit of 24 images.
 - `make-image-grid.py` only scans files directly inside the input folder. Subfolders are ignored.
+- Unreadable image files are skipped and reported instead of stopping the entire
+  grid job. If no readable images remain, the script fails.
 - Original input images are left untouched.
 - The image grid is always written as JPG. The grid uses a white background and balanced rows/columns.
+- The default grid output limit is 50,000,000 pixels. Larger grids require an explicit `--max-output-pixels` value.
+- JPEG output optimization is off by default to reduce peak memory use. Pass `--optimize` to request a smaller optimized file when extra memory use is acceptable.
 - With 2 images, the grid is 2 rows by 1 column, so the output is portrait-oriented.
 - `append-image-page.py` keeps the image aspect ratio and centers it on a white
   US Letter page.

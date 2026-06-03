@@ -14,9 +14,9 @@ HEIC_EXTENSIONS = {".heic", ".heif"}
 JPEG_EXTENSIONS = {".jpg", ".jpeg"}
 PNG_EXTENSIONS = {".png"}
 SUPPORTED_EXTENSIONS = HEIC_EXTENSIONS | JPEG_EXTENSIONS | PNG_EXTENSIONS
-DEFAULT_MAX_IMAGES = 40
+DEFAULT_MAX_IMAGES = 24
 DEFAULT_MAX_IMAGE_PIXELS = 80_000_000
-DEFAULT_MAX_OUTPUT_PIXELS = 200_000_000
+DEFAULT_MAX_OUTPUT_PIXELS = 50_000_000
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,14 @@ class GridSize:
 
     rows: int
     columns: int
+
+
+@dataclass(frozen=True)
+class SkippedImage:
+    """An input image that could not be safely used."""
+
+    path: Path
+    reason: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,6 +81,11 @@ def parse_args() -> argparse.Namespace:
         "--overwrite",
         action="store_true",
         help="Overwrite the output JPG if it already exists.",
+    )
+    parser.add_argument(
+        "--optimize",
+        action="store_true",
+        help="Ask Pillow to optimize the output JPEG. This can use more memory.",
     )
     parser.add_argument(
         "--max-images",
@@ -172,6 +185,36 @@ def enforce_image_pixel_limit(
         )
 
 
+def preflight_images(
+    images: list[Path],
+    max_image_pixels: int,
+) -> tuple[list[Path], list[SkippedImage]]:
+    """Return images that Pillow can identify without failing the whole job."""
+
+    Image, _, _ = load_pillow()
+    usable_images: list[Path] = []
+    skipped_images: list[SkippedImage] = []
+
+    for image_path in images:
+        try:
+            with Image.open(image_path) as image:
+                enforce_image_pixel_limit(image, image_path, max_image_pixels)
+                image.verify()
+        except Exception as exc:
+            skipped_images.append(SkippedImage(image_path, str(exc)))
+        else:
+            usable_images.append(image_path)
+
+    return usable_images, skipped_images
+
+
+def print_skipped_images(skipped_images: list[SkippedImage]) -> None:
+    """Print a concise report of images that were not included."""
+
+    for skipped in skipped_images:
+        print(f"skipped: {skipped.path} ({skipped.reason})", file=sys.stderr)
+
+
 def save_image_atomically(
     image: object,
     destination: Path,
@@ -208,10 +251,19 @@ def balanced_grid_size(count: int) -> GridSize:
     return GridSize(rows=rows, columns=columns)
 
 
+def draft_image_for_size(image: object, width: int, height: int) -> None:
+    """Ask Pillow to decode large JPEGs near the size that will be used."""
+
+    draft = getattr(image, "draft", None)
+    if callable(draft):
+        draft("RGB", (width, height))
+
+
 def fit_image(image: object, cell_width: int, cell_height: int) -> object:
     """Return an RGB copy of an image fitted within a grid cell."""
 
     Image, ImageOps, _ = load_pillow()
+    draft_image_for_size(image, cell_width, cell_height)
     image = ImageOps.exif_transpose(image)
     image.thumbnail((cell_width, cell_height), Image.Resampling.LANCZOS)
     if image.mode != "RGB":
@@ -226,12 +278,22 @@ def make_grid(
     cell_height: int,
     gap: int,
     quality: int,
+    optimize: bool,
     max_image_pixels: int,
     max_output_pixels: int,
 ) -> None:
     """Create and save a JPG grid from image paths."""
 
-    Image, _, UnidentifiedImageError = load_pillow()
+    Image, _, _ = load_pillow()
+    output_format = output.suffix.lower()
+    if output_format not in JPEG_EXTENSIONS:
+        fail("Output file must end with .jpg or .jpeg")
+
+    images, skipped_images = preflight_images(images, max_image_pixels)
+    print_skipped_images(skipped_images)
+    if not images:
+        fail("No readable images available for the grid.")
+
     size = balanced_grid_size(len(images))
     canvas_width = size.columns * cell_width + (size.columns + 1) * gap
     canvas_height = size.rows * cell_height + (size.rows + 1) * gap
@@ -244,27 +306,32 @@ def make_grid(
 
     canvas = Image.new("RGB", (canvas_width, canvas_height), "white")
 
-    for index, image_path in enumerate(images):
-        row = index // size.columns
-        column = index % size.columns
+    pasted_count = 0
+    for image_path in images:
+        row = pasted_count // size.columns
+        column = pasted_count % size.columns
         try:
             with Image.open(image_path) as image:
                 enforce_image_pixel_limit(image, image_path, max_image_pixels)
                 fitted = fit_image(image, cell_width, cell_height)
-        except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
-            fail(f"Could not read {image_path}: {exc}")
+        except Exception as exc:
+            skipped_images.append(SkippedImage(image_path, str(exc)))
+            print_skipped_images([skipped_images[-1]])
+            continue
 
         x = gap + column * (cell_width + gap) + (cell_width - fitted.width) // 2
         y = gap + row * (cell_height + gap) + (cell_height - fitted.height) // 2
         canvas.paste(fitted, (x, y))
+        pasted_count += 1
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output_format = output.suffix.lower()
-    if output_format not in JPEG_EXTENSIONS:
-        fail("Output file must end with .jpg or .jpeg")
-    save_image_atomically(canvas, output, "JPEG", quality=quality, optimize=True)
+    if pasted_count < 1:
+        fail("No readable images available for the grid.")
 
-    print(f"grid: {len(images)} image(s), {size.rows}x{size.columns}, {output}")
+    save_image_atomically(canvas, output, "JPEG", quality=quality, optimize=optimize)
+
+    print(f"grid: {pasted_count} image(s), {size.rows}x{size.columns}, {output}")
+    if skipped_images:
+        print(f"skipped: {len(skipped_images)} image(s)")
 
 
 def main() -> None:
@@ -314,6 +381,7 @@ def main() -> None:
         args.cell_height,
         args.gap,
         args.quality,
+        args.optimize,
         args.max_image_pixels,
         args.max_output_pixels,
     )

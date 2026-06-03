@@ -164,6 +164,14 @@ def validate_args(
         fail("--dpi must be between 72 and 600")
 
 
+def draft_image_for_size(image: object, width: int, height: int) -> None:
+    """Ask Pillow to decode large JPEGs near the size that will be used."""
+
+    draft = getattr(image, "draft", None)
+    if callable(draft):
+        draft("RGB", (width, height))
+
+
 def make_contained_image_pdf(
     image_path: Path,
     pdf_path: Path,
@@ -180,13 +188,15 @@ def make_contained_image_pdf(
 
     try:
         with Image.open(image_path) as image:
-            image = ImageOps.exif_transpose(image)
             image_pixels = image.width * image.height
             if image_pixels > max_image_pixels:
                 fail(
                     f"{image_path} is {image_pixels:,} pixels, above "
                     f"--max-image-pixels ({max_image_pixels:,}). Resize it or raise the limit."
                 )
+            draft_image_for_size(image, page_width, page_height)
+            image = ImageOps.exif_transpose(image)
+            image.thumbnail((page_width, page_height), Image.Resampling.LANCZOS)
             if image.mode in ("RGBA", "LA") or (
                 image.mode == "P" and "transparency" in image.info
             ):
@@ -197,7 +207,6 @@ def make_contained_image_pdf(
             elif image.mode != "RGB":
                 image = image.convert("RGB")
 
-            image.thumbnail((page_width, page_height), Image.Resampling.LANCZOS)
             page = Image.new("RGB", (page_width, page_height), "white")
             x = (page_width - image.width) // 2
             y = (page_height - image.height) // 2
