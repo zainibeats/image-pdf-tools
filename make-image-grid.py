@@ -237,6 +237,13 @@ def validate_output_path_safety(
         )
 
 
+def validate_jpeg_output_path(output_path: Path) -> None:
+    """Refuse unsupported output suffixes before image processing starts."""
+
+    if output_path.suffix.lower() not in JPEG_EXTENSIONS:
+        fail("Output file must end with .jpg or .jpeg")
+
+
 def collect_images(input_dir: Path) -> list[Path]:
     """Return supported, non-hidden image files from the top-level directory."""
 
@@ -409,10 +416,8 @@ def make_grid(
 ) -> None:
     """Create and save a JPG grid from image paths."""
 
+    validate_jpeg_output_path(output)
     Image, _, _ = load_pillow()
-    output_format = output.suffix.lower()
-    if output_format not in JPEG_EXTENSIONS:
-        fail("Output file must end with .jpg or .jpeg")
 
     images, skipped_images = preflight_images(images, max_image_pixels)
     print_skipped_images(skipped_images)
@@ -491,6 +496,7 @@ def main() -> None:
     output = Path(args.output).expanduser()
     if not output.is_absolute():
         output = (input_dir / output).resolve()
+    validate_jpeg_output_path(output)
     validate_output_path_safety(
         output,
         input_dir,

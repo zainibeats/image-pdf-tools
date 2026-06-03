@@ -69,3 +69,5 @@ In production, users may follow the documented setup and still be unable to proc
 `make-image-grid.py` creates the full RGB canvas before checking whether the output suffix is `.jpg` or `.jpeg` (`make-image-grid.py:245`, `make-image-grid.py:261-264`). If a user accidentally passes `-o output.png` or another unsupported suffix, the script can spend significant memory and time processing the full job before failing.
 
 In production, this turns a simple user typo into an avoidable resource spike. On constrained desktops, it can cause an apparent hang or process termination even though the command was invalid from the start.
+
+Progress: `make-image-grid.py` now validates that the output path ends in `.jpg` or `.jpeg` before collecting, preflighting, decoding, or allocating images, and `make_grid` keeps the same guard for direct callers. A regression test covers refusing non-JPEG output suffixes before image processing.

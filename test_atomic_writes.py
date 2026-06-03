@@ -167,6 +167,12 @@ class AtomicWriteTests(unittest.TestCase):
                     allow_risky_output_path=False,
                 )
 
+    def test_grid_output_suffix_requires_jpeg_before_processing(self) -> None:
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            make_image_grid.validate_jpeg_output_path(Path("grid.png"))
+
+        make_image_grid.validate_jpeg_output_path(Path("grid.jpeg"))
+
     def test_append_output_path_allows_image_or_pdf_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
