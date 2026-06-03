@@ -40,6 +40,8 @@ Both scripts check whether the output exists before doing the expensive work, th
 
 In production, this can destroy a file created by another process, a cloud-sync client, or a second copy of the script launched by mistake. The risk is higher in shared folders, synced folders, network drives, and desktop workflows where users may double-click or rerun commands without realizing a previous run is still active.
 
+Progress: Both atomic write helpers now make the final publish step honor `--overwrite`. When overwrite is not allowed, the completed temp file is linked into place with exclusive destination creation and the command fails if the output path appeared after the early validation check (`append-image-page.py:192-281`, `make-image-grid.py:235-286`). When `--overwrite` is passed, the scripts keep the intentional replacement behavior. Regression tests cover both refusing and allowing replacement for the PDF and image write paths.
+
 ## 6. PDF output can silently drop security restrictions and document structure
 
 `append-image-page.py` decrypts owner-restricted PDFs with an empty password when possible (`append-image-page.py:214-229`), then writes a new PDF with pages and simple string metadata only (`append-image-page.py:261-275`). It does not preserve encryption, permission restrictions, signatures, forms, outlines, attachments, document-level JavaScript, tagged-PDF structure, or other catalog-level features.

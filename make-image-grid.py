@@ -232,10 +232,32 @@ def fsync_directory(directory: Path) -> None:
         os.close(directory_fd)
 
 
+def publish_temp_file(temp_path: Path, destination: Path, overwrite: bool) -> None:
+    """Move a completed temporary file into place without racing overwrite checks."""
+
+    if overwrite:
+        temp_path.replace(destination)
+        return
+
+    try:
+        os.link(temp_path, destination)
+    except FileExistsError:
+        raise FileExistsError(
+            f"Output already exists. Pass --overwrite to replace it: {destination}"
+        ) from None
+    except OSError as exc:
+        raise OSError(
+            f"Could not create output without overwrite risk: {destination} ({exc})"
+        ) from exc
+    else:
+        temp_path.unlink(missing_ok=True)
+
+
 def save_image_atomically(
     image: object,
     destination: Path,
     image_format: str,
+    overwrite: bool,
     **save_kwargs: object,
 ) -> None:
     """Save an image durably through a temporary file before replacing the destination."""
@@ -255,7 +277,7 @@ def save_image_atomically(
             temp_file.flush()
             os.fsync(temp_file.fileno())
         fsync_directory(destination.parent)
-        temp_path.replace(destination)
+        publish_temp_file(temp_path, destination, overwrite)
         fsync_directory(destination.parent)
     except OSError as exc:
         if temp_path is not None:
@@ -304,6 +326,7 @@ def make_grid(
     optimize: bool,
     max_image_pixels: int,
     max_output_pixels: int,
+    overwrite: bool,
 ) -> None:
     """Create and save a JPG grid from image paths."""
 
@@ -350,7 +373,14 @@ def make_grid(
     if pasted_count < 1:
         fail("No readable images available for the grid.")
 
-    save_image_atomically(canvas, output, "JPEG", quality=quality, optimize=optimize)
+    save_image_atomically(
+        canvas,
+        output,
+        "JPEG",
+        overwrite,
+        quality=quality,
+        optimize=optimize,
+    )
 
     print(f"grid: {pasted_count} image(s), {size.rows}x{size.columns}, {output}")
     if skipped_images:
@@ -407,6 +437,7 @@ def main() -> None:
         args.optimize,
         args.max_image_pixels,
         args.max_output_pixels,
+        args.overwrite,
     )
 
 

@@ -189,6 +189,27 @@ def fsync_directory(directory: Path) -> None:
         os.close(directory_fd)
 
 
+def publish_temp_file(temp_path: Path, destination: Path, overwrite: bool) -> None:
+    """Move a completed temporary file into place without racing overwrite checks."""
+
+    if overwrite:
+        temp_path.replace(destination)
+        return
+
+    try:
+        os.link(temp_path, destination)
+    except FileExistsError:
+        raise FileExistsError(
+            f"Output already exists. Pass --overwrite to replace it: {destination}"
+        ) from None
+    except OSError as exc:
+        raise OSError(
+            f"Could not create output without overwrite risk: {destination} ({exc})"
+        ) from exc
+    else:
+        temp_path.unlink(missing_ok=True)
+
+
 def make_contained_image_pdf(
     image_path: Path,
     pdf_path: Path,
@@ -233,7 +254,7 @@ def make_contained_image_pdf(
         fail(f"Could not read image {image_path}: {exc}")
 
 
-def write_pdf_atomically(writer: object, output_pdf: Path) -> None:
+def write_pdf_atomically(writer: object, output_pdf: Path, overwrite: bool) -> None:
     """Save a PDF durably through a temporary file before replacing the destination."""
 
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
@@ -251,7 +272,7 @@ def write_pdf_atomically(writer: object, output_pdf: Path) -> None:
             temp_file.flush()
             os.fsync(temp_file.fileno())
         fsync_directory(output_pdf.parent)
-        temp_path.replace(output_pdf)
+        publish_temp_file(temp_path, output_pdf, overwrite)
         fsync_directory(output_pdf.parent)
     except Exception as exc:
         if temp_path is not None:
@@ -283,6 +304,7 @@ def append_pdf_page(
     image_page_pdf: Path,
     output_pdf: Path,
     max_pdf_pages: int,
+    overwrite: bool,
 ) -> int:
     """Append the generated image page PDF to the source PDF."""
 
@@ -321,7 +343,7 @@ def append_pdf_page(
         if metadata:
             writer.add_metadata(metadata)
 
-    write_pdf_atomically(writer, output_pdf)
+    write_pdf_atomically(writer, output_pdf, overwrite)
 
     return len(writer.pages)
 
@@ -367,6 +389,7 @@ def main() -> None:
             image_page_pdf,
             output_path,
             args.max_pdf_pages,
+            args.overwrite,
         )
 
     print(f"wrote: {output_path}")
