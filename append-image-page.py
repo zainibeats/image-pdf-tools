@@ -15,6 +15,14 @@ SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
 DEFAULT_MAX_IMAGE_PIXELS = 80_000_000
 DEFAULT_MAX_PDF_PAGES = 10
 DEFAULT_MAX_PDF_BYTES = 25 * 1024 * 1024
+WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,6 +55,14 @@ def parse_args() -> argparse.Namespace:
         "--overwrite",
         action="store_true",
         help="Overwrite the output PDF if it already exists.",
+    )
+    parser.add_argument(
+        "--allow-risky-output-path",
+        action="store_true",
+        help=(
+            "Allow output paths outside the image/PDF folders, paths that create "
+            "multiple missing parent folders, or Windows reserved device names."
+        ),
     )
     parser.add_argument(
         "--allow-unrestricted-output",
@@ -139,6 +155,70 @@ def resolve_output_path(output: str | None, image_path: Path) -> Path:
     return Path(output).expanduser().resolve()
 
 
+def is_relative_to(path: Path, parent: Path) -> bool:
+    """Return whether path is inside parent, including compatibility with Python 3.10."""
+
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def first_missing_parent(path: Path) -> Path | None:
+    """Return the highest missing directory needed for path, if any."""
+
+    missing: list[Path] = []
+    current = path.parent
+    while not current.exists():
+        missing.append(current)
+        if current.parent == current:
+            break
+        current = current.parent
+    return missing[-1] if missing else None
+
+
+def has_windows_reserved_name(path: Path) -> bool:
+    """Return whether any path component is a reserved Windows device name."""
+
+    for part in path.parts:
+        stem = part.split(".", 1)[0].upper()
+        if stem in WINDOWS_RESERVED_NAMES:
+            return True
+    return False
+
+
+def validate_output_path_safety(
+    output_path: Path,
+    allowed_roots: list[Path],
+    allow_risky_output_path: bool,
+) -> None:
+    """Refuse output paths that are easy to mistype into risky locations."""
+
+    if allow_risky_output_path:
+        return
+
+    if has_windows_reserved_name(output_path):
+        fail(
+            "Output path contains a Windows reserved device name. Choose a different "
+            "filename or pass --allow-risky-output-path if this is intentional."
+        )
+
+    if not any(is_relative_to(output_path, root) for root in allowed_roots):
+        roots = ", ".join(str(root) for root in allowed_roots)
+        fail(
+            f"Output path must be inside the image or PDF folder ({roots}). "
+            "Pass --allow-risky-output-path if this destination is intentional."
+        )
+
+    missing_parent = first_missing_parent(output_path)
+    if missing_parent is not None and missing_parent != output_path.parent:
+        fail(
+            f"Output path would create multiple missing folders starting at {missing_parent}. "
+            "Create the folders first or pass --allow-risky-output-path if this is intentional."
+        )
+
+
 def validate_args(
     pdf_path: Path,
     image_path: Path,
@@ -146,6 +226,7 @@ def validate_args(
     dpi: int,
     overwrite: bool,
     max_pdf_bytes: int,
+    allow_risky_output_path: bool,
 ) -> None:
     """Validate paths and command line option ranges."""
 
@@ -167,6 +248,11 @@ def validate_args(
         fail(f"Output path must end with .pdf: {output_path}")
     if output_path == pdf_path:
         fail("Output path cannot be the same as the input PDF.")
+    validate_output_path_safety(
+        output_path,
+        [image_path.parent, pdf_path.parent],
+        allow_risky_output_path,
+    )
     if output_path.exists() and not overwrite:
         fail(f"Output already exists. Pass --overwrite to replace it: {output_path}")
     if dpi < 72 or dpi > 600:
@@ -397,6 +483,7 @@ def main() -> None:
         args.dpi,
         args.overwrite,
         max_pdf_bytes,
+        args.allow_risky_output_path,
     )
 
     Image, _, _ = load_pillow()

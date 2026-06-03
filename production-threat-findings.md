@@ -56,6 +56,8 @@ Both scripts accept arbitrary output paths and create missing parent directories
 
 In production, a typo or pasted path can write files into an unintended folder, create unexpected directories, or fail late with platform-specific errors. For non-technical users, this is a realistic data-handling risk because the scripts provide no confirmation step or path safety warning before writing.
 
+Progress: Both scripts now validate output paths before processing starts. `make-image-grid.py` requires the output to stay inside the input image folder by default, while `append-image-page.py` requires the output to stay inside either the image folder or the source PDF folder. Both scripts refuse Windows reserved device names and paths that would create multiple missing parent folders unless the user passes `--allow-risky-output-path`. This does not detect every risky filesystem type such as network, removable, or cloud-synced drives, but it prevents common typo and pasted-path mistakes and makes unusual destinations explicit.
+
 ## 8. HEIC/HEIF support may fail on some supported desktops despite the documented workflow
 
 `make-image-grid.py` only registers HEIC/HEIF support if a selected source has a HEIC/HEIF extension (`make-image-grid.py:307-308`), and installation depends on `pillow-heif` from `requirements.txt`. On some Windows, macOS, Linux, Python-version, or CPU-architecture combinations, the dependency installation or native image decoding can fail even when Pillow itself installs.

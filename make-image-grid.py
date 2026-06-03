@@ -18,6 +18,14 @@ SUPPORTED_EXTENSIONS = HEIC_EXTENSIONS | JPEG_EXTENSIONS | PNG_EXTENSIONS
 DEFAULT_MAX_IMAGES = 24
 DEFAULT_MAX_IMAGE_PIXELS = 80_000_000
 DEFAULT_MAX_OUTPUT_PIXELS = 50_000_000
+WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
 
 
 @dataclass(frozen=True)
@@ -82,6 +90,14 @@ def parse_args() -> argparse.Namespace:
         "--overwrite",
         action="store_true",
         help="Overwrite the output JPG if it already exists.",
+    )
+    parser.add_argument(
+        "--allow-risky-output-path",
+        action="store_true",
+        help=(
+            "Allow output paths outside the input folder, paths that create multiple "
+            "missing parent folders, or Windows reserved device names."
+        ),
     )
     parser.add_argument(
         "--optimize",
@@ -156,6 +172,69 @@ def normalize_dir(path: str) -> Path:
     if not directory.is_dir():
         fail(f"Input directory does not exist: {directory}")
     return directory
+
+
+def is_relative_to(path: Path, parent: Path) -> bool:
+    """Return whether path is inside parent, including compatibility with Python 3.10."""
+
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def first_missing_parent(path: Path) -> Path | None:
+    """Return the highest missing directory needed for path, if any."""
+
+    missing: list[Path] = []
+    current = path.parent
+    while not current.exists():
+        missing.append(current)
+        if current.parent == current:
+            break
+        current = current.parent
+    return missing[-1] if missing else None
+
+
+def has_windows_reserved_name(path: Path) -> bool:
+    """Return whether any path component is a reserved Windows device name."""
+
+    for part in path.parts:
+        stem = part.split(".", 1)[0].upper()
+        if stem in WINDOWS_RESERVED_NAMES:
+            return True
+    return False
+
+
+def validate_output_path_safety(
+    output_path: Path,
+    allowed_root: Path,
+    allow_risky_output_path: bool,
+) -> None:
+    """Refuse output paths that are easy to mistype into risky locations."""
+
+    if allow_risky_output_path:
+        return
+
+    if has_windows_reserved_name(output_path):
+        fail(
+            "Output path contains a Windows reserved device name. Choose a different "
+            "filename or pass --allow-risky-output-path if this is intentional."
+        )
+
+    if not is_relative_to(output_path, allowed_root):
+        fail(
+            f"Output path must be inside the input folder ({allowed_root}). "
+            "Pass --allow-risky-output-path if this destination is intentional."
+        )
+
+    missing_parent = first_missing_parent(output_path)
+    if missing_parent is not None and missing_parent != output_path.parent:
+        fail(
+            f"Output path would create multiple missing folders starting at {missing_parent}. "
+            "Create the folders first or pass --allow-risky-output-path if this is intentional."
+        )
 
 
 def collect_images(input_dir: Path) -> list[Path]:
@@ -412,6 +491,11 @@ def main() -> None:
     output = Path(args.output).expanduser()
     if not output.is_absolute():
         output = (input_dir / output).resolve()
+    validate_output_path_safety(
+        output,
+        input_dir,
+        args.allow_risky_output_path,
+    )
     if output.exists() and not args.overwrite:
         fail(f"Output already exists. Pass --overwrite to replace it: {output}")
 

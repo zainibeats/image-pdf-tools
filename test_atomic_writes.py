@@ -135,6 +135,68 @@ class AtomicWriteTests(unittest.TestCase):
         self.assertEqual(reader.decrypt_calls, [""])
         self.assertIn("will not preserve input encryption", stderr.getvalue())
 
+    def test_grid_output_path_must_stay_inside_input_folder_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_dir = root / "images"
+            input_dir.mkdir()
+            output = root / "outside.jpg"
+
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                make_image_grid.validate_output_path_safety(
+                    output,
+                    input_dir,
+                    allow_risky_output_path=False,
+                )
+
+            make_image_grid.validate_output_path_safety(
+                output,
+                input_dir,
+                allow_risky_output_path=True,
+            )
+
+    def test_grid_output_path_refuses_multiple_new_parent_folders(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_dir = Path(temp_dir)
+            output = input_dir / "new" / "nested" / "grid.jpg"
+
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                make_image_grid.validate_output_path_safety(
+                    output,
+                    input_dir,
+                    allow_risky_output_path=False,
+                )
+
+    def test_append_output_path_allows_image_or_pdf_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            image_dir = root / "images"
+            pdf_dir = root / "pdfs"
+            image_dir.mkdir()
+            pdf_dir.mkdir()
+
+            append_image_page.validate_output_path_safety(
+                image_dir / "output.pdf",
+                [image_dir, pdf_dir],
+                allow_risky_output_path=False,
+            )
+            append_image_page.validate_output_path_safety(
+                pdf_dir / "output.pdf",
+                [image_dir, pdf_dir],
+                allow_risky_output_path=False,
+            )
+
+    def test_append_output_path_refuses_reserved_windows_device_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "CON.pdf"
+
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                append_image_page.validate_output_path_safety(
+                    output,
+                    [Path(temp_dir)],
+                    allow_risky_output_path=False,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

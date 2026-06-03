@@ -76,7 +76,7 @@ This writes a PDF next to the image by default:
 
 ```bash
 # Choosing the grid output name and path
-python make-image-grid.py ~/Pictures/images -o ~/Desktop/image-grid.jpg
+python make-image-grid.py ~/Pictures/images -o named-image-grid.jpg
 
 # Raise the batch limit for a larger image set:
 python make-image-grid.py ~/Pictures/images --max-images 60
@@ -89,7 +89,7 @@ python make-image-grid.py ~/Pictures/images --max-output-pixels 100000000
 
 ```bash
 # Choosing the final PDF output name and path
-python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf -o ~/Desktop/final.pdf
+python append-image-page.py ~/Pictures/images/image-grid.jpg --pdf ~/Downloads/input.pdf -o ~/Pictures/images/final.pdf
 
 # Raise PDF page limit
 python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --max-pdf-pages 20
@@ -102,6 +102,12 @@ python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf
 ```
 
 _Existing output files are not replaced unless `--overwrite` is passed._
+
+_By default, grid outputs must stay inside the input image folder, and appended
+PDF outputs must stay inside either the image folder or the source PDF folder.
+The scripts also refuse Windows reserved device names and paths that would
+create multiple missing folders. Pass `--allow-risky-output-path` only when an
+unusual destination is intentional._
 
 > **Note**: The append script can handle unencrypted PDFs by default. Owner-restricted
 PDFs that open with an empty password require `--allow-unrestricted-output`,
@@ -124,6 +130,8 @@ restrictions. PDFs that require a user password are not supported.
 - `append-image-page.py` preserves source pages and simple string metadata, but
   it does not preserve encryption, permission restrictions, signatures, forms,
   outlines, attachments, document-level JavaScript, or tagged-PDF structure.
+- Output paths are checked before processing starts. Unusual destinations
+  outside the expected folders require `--allow-risky-output-path`.
 - The scripts fail when inputs exceed configured safety limits. Use
   `--max-images`, `--max-image-pixels`, `--max-output-pixels`, or
   `--max-pdf-pages` to raise a limit for larger inputs. Use `--max-pdf-mb` to
