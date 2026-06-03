@@ -13,6 +13,7 @@ LETTER_SIZE_INCHES = (8.5, 11.0)
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
 DEFAULT_MAX_IMAGE_PIXELS = 80_000_000
 DEFAULT_MAX_PDF_PAGES = 10
+DEFAULT_MAX_PDF_BYTES = 25 * 1024 * 1024
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,6 +61,15 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_MAX_PDF_PAGES,
         help=f"Maximum pages allowed in the input PDF. Defaults to {DEFAULT_MAX_PDF_PAGES}.",
+    )
+    parser.add_argument(
+        "--max-pdf-mb",
+        type=int,
+        default=DEFAULT_MAX_PDF_BYTES // (1024 * 1024),
+        help=(
+            "Maximum input PDF file size in MiB before parsing. "
+            f"Defaults to {DEFAULT_MAX_PDF_BYTES // (1024 * 1024)}."
+        ),
     )
     return parser.parse_args()
 
@@ -126,11 +136,18 @@ def validate_args(
     output_path: Path,
     dpi: int,
     overwrite: bool,
+    max_pdf_bytes: int,
 ) -> None:
     """Validate paths and command line option ranges."""
 
     if pdf_path.suffix.lower() != ".pdf":
         fail(f"Input PDF must end with .pdf: {pdf_path}")
+    pdf_size = pdf_path.stat().st_size
+    if pdf_size > max_pdf_bytes:
+        fail(
+            f"Input PDF is {pdf_size:,} bytes, above --max-pdf-mb "
+            f"({max_pdf_bytes // (1024 * 1024)} MiB). Use a smaller PDF or raise the limit."
+        )
     if image_path.suffix.lower() not in SUPPORTED_IMAGE_EXTENSIONS:
         fail(
             "Image must be one of: "
@@ -285,15 +302,25 @@ def main() -> None:
         fail("--max-image-pixels must be positive")
     if args.max_pdf_pages < 1:
         fail("--max-pdf-pages must be positive")
-
-    Image, _, _ = load_pillow()
-    Image.MAX_IMAGE_PIXELS = args.max_image_pixels
+    if args.max_pdf_mb < 1:
+        fail("--max-pdf-mb must be positive")
 
     pdf_path = existing_file(args.pdf, "PDF")
     image_path = existing_file(args.image, "Image")
     output_path = resolve_output_path(args.output, image_path)
 
-    validate_args(pdf_path, image_path, output_path, args.dpi, args.overwrite)
+    max_pdf_bytes = args.max_pdf_mb * 1024 * 1024
+    validate_args(
+        pdf_path,
+        image_path,
+        output_path,
+        args.dpi,
+        args.overwrite,
+        max_pdf_bytes,
+    )
+
+    Image, _, _ = load_pillow()
+    Image.MAX_IMAGE_PIXELS = args.max_image_pixels
 
     with tempfile.TemporaryDirectory() as temp_dir:
         image_page_pdf = Path(temp_dir) / "image-page.pdf"

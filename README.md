@@ -12,7 +12,7 @@ Original images and PDFs are always preserved.
 - `make-image-grid.py`: combines HEIC, HEIF, JPG, JPEG, and PNG images into one
   balanced JPG grid. Default image limit is 40. 
 - `append-image-page.py`: appends a JPG/JPEG image as a US Letter page at the
-  end of an existing PDF. Default input PDF limit is 10 pages. 
+  end of an existing PDF. Default input PDF limits are 10 pages and 25 MiB. 
 
 ## Dependencies
 
@@ -90,6 +90,9 @@ python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf
 
 # Raise PDF page limit
 python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --max-pdf-pages 20
+
+# Raise PDF file-size limit
+python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --max-pdf-mb 50
 ```
 
 _Existing output files are not replaced unless `--overwrite` is passed._
@@ -109,4 +112,5 @@ supported.
   US Letter page.
 - The scripts fail when inputs exceed configured safety limits. Use
   `--max-images`, `--max-image-pixels`, `--max-output-pixels`, or
-  `--max-pdf-pages` to raise a limit for larger inputs.
+  `--max-pdf-pages` to raise a limit for larger inputs. Use `--max-pdf-mb` to
+  allow a larger PDF file before parsing.
