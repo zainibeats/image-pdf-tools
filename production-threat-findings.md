@@ -32,6 +32,8 @@ Both scripts write to a temporary file and then replace the destination (`append
 
 In production, a power outage, forced reboot, removable-drive disconnect, or cloud-sync interruption can still leave no durable final output, an older output, or an orphaned hidden temporary file. This matters most when `--overwrite` is used, because the user may believe an existing production PDF or JPG has been safely replaced when the filesystem has not actually committed the new file.
 
+Progress: Both scripts now fsync the completed temporary output before replacement and fsync the output directory before and after the final rename where the operating system supports directory fsync (`append-image-page.py:176-260`, `make-image-grid.py:219-264`). This materially improves crash durability on normal POSIX filesystems, though some platforms, network mounts, removable media, and cloud-sync layers can still ignore or weaken those guarantees.
+
 ## 5. The overwrite protection has a race window
 
 Both scripts check whether the output exists before doing the expensive work, then later replace the output path (`append-image-page.py:144-145`, `append-image-page.py:193-211`, `make-image-grid.py:295-296`, `make-image-grid.py:175-198`). If another process creates or changes that path after the check but before `Path.replace`, the scripts can replace it even when `--overwrite` was not originally allowed.

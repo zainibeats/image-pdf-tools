@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -215,15 +216,32 @@ def print_skipped_images(skipped_images: list[SkippedImage]) -> None:
         print(f"skipped: {skipped.path} ({skipped.reason})", file=sys.stderr)
 
 
+def fsync_directory(directory: Path) -> None:
+    """Best-effort fsync for directory entry changes on platforms that allow it."""
+
+    try:
+        directory_fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+
+    try:
+        os.fsync(directory_fd)
+    except OSError:
+        pass
+    finally:
+        os.close(directory_fd)
+
+
 def save_image_atomically(
     image: object,
     destination: Path,
     image_format: str,
     **save_kwargs: object,
 ) -> None:
-    """Save an image through a temporary file before replacing the destination."""
+    """Save an image durably through a temporary file before replacing the destination."""
 
     destination.parent.mkdir(parents=True, exist_ok=True)
+    fsync_directory(destination.parent)
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -233,11 +251,16 @@ def save_image_atomically(
             delete=False,
         ) as temp_file:
             temp_path = Path(temp_file.name)
-        image.save(temp_path, image_format, **save_kwargs)
+            image.save(temp_file, image_format, **save_kwargs)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        fsync_directory(destination.parent)
         temp_path.replace(destination)
+        fsync_directory(destination.parent)
     except OSError as exc:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
+            fsync_directory(destination.parent)
         fail(f"Could not write {destination}: {exc}")
 
 

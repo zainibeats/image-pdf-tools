@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -172,6 +173,22 @@ def draft_image_for_size(image: object, width: int, height: int) -> None:
         draft("RGB", (width, height))
 
 
+def fsync_directory(directory: Path) -> None:
+    """Best-effort fsync for directory entry changes on platforms that allow it."""
+
+    try:
+        directory_fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+
+    try:
+        os.fsync(directory_fd)
+    except OSError:
+        pass
+    finally:
+        os.close(directory_fd)
+
+
 def make_contained_image_pdf(
     image_path: Path,
     pdf_path: Path,
@@ -217,9 +234,10 @@ def make_contained_image_pdf(
 
 
 def write_pdf_atomically(writer: object, output_pdf: Path) -> None:
-    """Save a PDF through a temporary file before replacing the destination."""
+    """Save a PDF durably through a temporary file before replacing the destination."""
 
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
+    fsync_directory(output_pdf.parent)
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -230,10 +248,15 @@ def write_pdf_atomically(writer: object, output_pdf: Path) -> None:
         ) as temp_file:
             temp_path = Path(temp_file.name)
             writer.write(temp_file)  # type: ignore[attr-defined]
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        fsync_directory(output_pdf.parent)
         temp_path.replace(output_pdf)
+        fsync_directory(output_pdf.parent)
     except Exception as exc:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
+            fsync_directory(output_pdf.parent)
         fail(f"Could not write output PDF {output_pdf}: {exc}")
 
 
