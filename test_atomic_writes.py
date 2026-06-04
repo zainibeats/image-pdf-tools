@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 def load_script_module(name: str, filename: str) -> object:
@@ -50,7 +52,31 @@ class EmptyPasswordEncryptedReader:
         return 1
 
 
+class FakePdfReader:
+    def __init__(self, page_count: int) -> None:
+        self.is_encrypted = False
+        self.metadata: dict[str, str] = {}
+        self.pages = [object() for _ in range(page_count)]
+
+
+class FakePdfWriter:
+    def __init__(self) -> None:
+        self.pages: list[object] = []
+
+    def add_page(self, page: object) -> None:
+        self.pages.append(page)
+
+    def add_metadata(self, metadata: dict[str, str]) -> None:
+        self.metadata = metadata
+
+
 class AtomicWriteTests(unittest.TestCase):
+    def assert_exits_with_error(self, callback: object, expected: str) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit):
+            callback()
+        self.assertIn(expected, stderr.getvalue())
+
     def test_pdf_write_without_overwrite_refuses_existing_destination(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             destination = Path(temp_dir) / "output.pdf"
@@ -202,6 +228,209 @@ class AtomicWriteTests(unittest.TestCase):
                     [Path(temp_dir)],
                     allow_risky_output_path=False,
                 )
+
+    def test_grid_numeric_limits_must_be_positive_or_in_range(self) -> None:
+        base_args = SimpleNamespace(
+            input_dir=".",
+            output="image-grid.jpg",
+            quality=90,
+            cell_width=1200,
+            cell_height=1600,
+            gap=24,
+            overwrite=False,
+            allow_risky_output_path=False,
+            optimize=False,
+            max_images=24,
+            max_image_pixels=80_000_000,
+            max_output_pixels=50_000_000,
+        )
+
+        cases = [
+            ("quality", 0, "--quality must be between 1 and 100"),
+            ("cell_width", 0, "--cell-width and --cell-height must be positive"),
+            ("cell_height", 0, "--cell-width and --cell-height must be positive"),
+            ("gap", -1, "--gap must be zero or greater"),
+            ("max_images", 0, "--max-images must be positive"),
+            ("max_image_pixels", 0, "--max-image-pixels must be positive"),
+            ("max_output_pixels", 0, "--max-output-pixels must be positive"),
+        ]
+
+        for field, value, expected in cases:
+            with self.subTest(field=field):
+                args = SimpleNamespace(**vars(base_args))
+                setattr(args, field, value)
+                with patch.object(make_image_grid, "parse_args", return_value=args):
+                    self.assert_exits_with_error(make_image_grid.main, expected)
+
+    def test_append_numeric_limits_must_be_positive_or_in_range(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            image = root / "image.jpg"
+            pdf = root / "input.pdf"
+            output = root / "output.pdf"
+            image.write_bytes(b"jpg")
+            pdf.write_bytes(b"%PDF")
+
+            base_args = SimpleNamespace(
+                image=str(image),
+                pdf=str(pdf),
+                output=str(output),
+                dpi=200,
+                overwrite=False,
+                allow_risky_output_path=False,
+                allow_unrestricted_output=False,
+                max_image_pixels=80_000_000,
+                max_pdf_pages=10,
+                max_pdf_mb=25,
+            )
+
+            early_cases = [
+                ("max_image_pixels", 0, "--max-image-pixels must be positive"),
+                ("max_pdf_pages", 0, "--max-pdf-pages must be positive"),
+                ("max_pdf_mb", 0, "--max-pdf-mb must be positive"),
+            ]
+            for field, value, expected in early_cases:
+                with self.subTest(field=field):
+                    args = SimpleNamespace(**vars(base_args))
+                    setattr(args, field, value)
+                    with patch.object(append_image_page, "parse_args", return_value=args):
+                        self.assert_exits_with_error(append_image_page.main, expected)
+
+            args = SimpleNamespace(**vars(base_args))
+            args.dpi = 71
+            with patch.object(append_image_page, "parse_args", return_value=args):
+                self.assert_exits_with_error(
+                    append_image_page.main,
+                    "--dpi must be between 72 and 600",
+                )
+
+    def test_append_input_and_output_suffixes_are_validated_before_processing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            pdf = root / "input.pdf"
+            image = root / "image.jpg"
+            pdf.write_bytes(b"%PDF")
+            image.write_bytes(b"jpg")
+
+            self.assert_exits_with_error(
+                lambda: append_image_page.validate_args(
+                    root / "input.txt",
+                    image,
+                    root / "output.pdf",
+                    dpi=200,
+                    overwrite=False,
+                    max_pdf_bytes=1024,
+                    allow_risky_output_path=False,
+                ),
+                "Input PDF must end with .pdf",
+            )
+            self.assert_exits_with_error(
+                lambda: append_image_page.validate_args(
+                    pdf,
+                    root / "image.png",
+                    root / "output.pdf",
+                    dpi=200,
+                    overwrite=False,
+                    max_pdf_bytes=1024,
+                    allow_risky_output_path=False,
+                ),
+                "Image must be one of",
+            )
+            self.assert_exits_with_error(
+                lambda: append_image_page.validate_args(
+                    pdf,
+                    image,
+                    root / "output.txt",
+                    dpi=200,
+                    overwrite=False,
+                    max_pdf_bytes=1024,
+                    allow_risky_output_path=False,
+                ),
+                "Output path must end with .pdf",
+            )
+
+    def test_append_refuses_pdf_file_size_above_configured_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            pdf = root / "input.pdf"
+            image = root / "image.jpg"
+            pdf.write_bytes(b"x" * 11)
+            image.write_bytes(b"jpg")
+
+            self.assert_exits_with_error(
+                lambda: append_image_page.validate_args(
+                    pdf,
+                    image,
+                    root / "output.pdf",
+                    dpi=200,
+                    overwrite=False,
+                    max_pdf_bytes=10,
+                    allow_risky_output_path=False,
+                ),
+                "above --max-pdf-mb",
+            )
+
+    def test_append_refuses_pdf_page_count_above_configured_limit(self) -> None:
+        readers = iter([FakePdfReader(3), FakePdfReader(1)])
+
+        def fake_reader(_path: str) -> FakePdfReader:
+            return next(readers)
+
+        with (
+            patch.object(
+                append_image_page,
+                "load_pypdf",
+                return_value=(fake_reader, FakePdfWriter),
+            ),
+            patch.object(append_image_page, "write_pdf_atomically") as write_pdf,
+        ):
+            self.assert_exits_with_error(
+                lambda: append_image_page.append_pdf_page(
+                    Path("input.pdf"),
+                    Path("image-page.pdf"),
+                    Path("output.pdf"),
+                    max_pdf_pages=2,
+                    overwrite=False,
+                    allow_unrestricted_output=False,
+                ),
+                "above --max-pdf-pages",
+            )
+
+        write_pdf.assert_not_called()
+
+    def test_grid_refuses_output_pixel_count_above_configured_limit(self) -> None:
+        class FakeImageModule:
+            @staticmethod
+            def new(_mode: str, _size: tuple[int, int], _color: str) -> object:
+                return object()
+
+        with (
+            patch.object(
+                make_image_grid,
+                "load_pillow",
+                return_value=(FakeImageModule, object(), Exception),
+            ),
+            patch.object(
+                make_image_grid,
+                "preflight_images",
+                return_value=([Path("one.jpg")], []),
+            ),
+        ):
+            self.assert_exits_with_error(
+                lambda: make_image_grid.make_grid(
+                    [Path("one.jpg")],
+                    Path("grid.jpg"),
+                    cell_width=10,
+                    cell_height=10,
+                    gap=1,
+                    quality=90,
+                    optimize=False,
+                    max_image_pixels=10_000,
+                    max_output_pixels=100,
+                    overwrite=False,
+                ),
+                "above --max-output-pixels",
+            )
 
 
 if __name__ == "__main__":
