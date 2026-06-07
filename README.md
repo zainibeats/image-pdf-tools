@@ -97,8 +97,8 @@ python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf
 # Raise PDF file-size limit
 python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --max-pdf-mb 50
 
-# Intentionally rewrite an owner-restricted PDF as unrestricted output
-python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --allow-unrestricted-output
+# Refuse owner-restricted PDFs instead of producing unrestricted output
+python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --refuse-unrestricted-output
 ```
 
 _Existing output files are not replaced unless `--overwrite` is passed._
@@ -109,10 +109,11 @@ The scripts also refuse Windows reserved device names and paths that would
 create multiple missing folders. Pass `--allow-risky-output-path` only when an
 unusual destination is intentional._
 
-> **Note**: The append script can handle unencrypted PDFs by default. Owner-restricted
-PDFs that open with an empty password require `--allow-unrestricted-output`,
-because the output PDF will not preserve the original encryption or permission
-restrictions. PDFs that require a user password are not supported.
+> **Note**: The append script can handle unencrypted PDFs by default.
+Owner-restricted PDFs that open with an empty password are accepted, but the
+output PDF will not preserve the original encryption or permission restrictions.
+The script prints a warning when this happens. Pass `--refuse-unrestricted-output`
+to stop instead. PDFs that require a user password are not supported.
 
 ## Behavior
 

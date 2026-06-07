@@ -135,19 +135,7 @@ class AtomicWriteTests(unittest.TestCase):
 
             self.assertEqual(destination.read_bytes(), b"new")
 
-    def test_encrypted_pdf_requires_explicit_unrestricted_output_consent(self) -> None:
-        reader = EmptyPasswordEncryptedReader()
-
-        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            append_image_page.decrypt_reader_if_needed(
-                reader,
-                Path("restricted.pdf"),
-                allow_unrestricted_output=False,
-            )
-
-        self.assertEqual(reader.decrypt_calls, [])
-
-    def test_encrypted_pdf_consent_warns_about_lost_restrictions(self) -> None:
+    def test_encrypted_pdf_allows_unrestricted_output_by_default(self) -> None:
         reader = EmptyPasswordEncryptedReader()
         stderr = io.StringIO()
 
@@ -155,7 +143,33 @@ class AtomicWriteTests(unittest.TestCase):
             append_image_page.decrypt_reader_if_needed(
                 reader,
                 Path("restricted.pdf"),
-                allow_unrestricted_output=True,
+                refuse_unrestricted_output=False,
+            )
+
+        self.assertEqual(reader.decrypt_calls, [""])
+        self.assertIn("will not preserve input encryption", stderr.getvalue())
+
+    def test_encrypted_pdf_strict_mode_refuses_unrestricted_output(self) -> None:
+        reader = EmptyPasswordEncryptedReader()
+
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            append_image_page.decrypt_reader_if_needed(
+                reader,
+                Path("restricted.pdf"),
+                refuse_unrestricted_output=True,
+            )
+
+        self.assertEqual(reader.decrypt_calls, [])
+
+    def test_encrypted_pdf_warning_mentions_lost_restrictions(self) -> None:
+        reader = EmptyPasswordEncryptedReader()
+        stderr = io.StringIO()
+
+        with redirect_stderr(stderr):
+            append_image_page.decrypt_reader_if_needed(
+                reader,
+                Path("restricted.pdf"),
+                refuse_unrestricted_output=False,
             )
 
         self.assertEqual(reader.decrypt_calls, [""])
@@ -279,6 +293,7 @@ class AtomicWriteTests(unittest.TestCase):
                 overwrite=False,
                 allow_risky_output_path=False,
                 allow_unrestricted_output=False,
+                refuse_unrestricted_output=False,
                 max_image_pixels=80_000_000,
                 max_pdf_pages=10,
                 max_pdf_mb=25,
@@ -391,7 +406,7 @@ class AtomicWriteTests(unittest.TestCase):
                     Path("output.pdf"),
                     max_pdf_pages=2,
                     overwrite=False,
-                    allow_unrestricted_output=False,
+                    refuse_unrestricted_output=False,
                 ),
                 "above --max-pdf-pages",
             )

@@ -68,8 +68,16 @@ def parse_args() -> argparse.Namespace:
         "--allow-unrestricted-output",
         action="store_true",
         help=(
-            "Allow owner-restricted PDFs to be rewritten as unrestricted output. "
-            "The output PDF will not preserve encryption or permission restrictions."
+            "Deprecated compatibility option. Owner-restricted PDFs are rewritten "
+            "as unrestricted output by default."
+        ),
+    )
+    parser.add_argument(
+        "--refuse-unrestricted-output",
+        action="store_true",
+        help=(
+            "Refuse owner-restricted PDFs instead of rewriting them as unrestricted "
+            "output."
         ),
     )
     parser.add_argument(
@@ -378,19 +386,17 @@ def write_pdf_atomically(writer: object, output_pdf: Path, overwrite: bool) -> N
 def decrypt_reader_if_needed(
     reader: object,
     source_pdf: Path,
-    allow_unrestricted_output: bool,
+    refuse_unrestricted_output: bool,
 ) -> None:
     """Try to open an encrypted PDF that does not require a user password."""
 
     if not getattr(reader, "is_encrypted", False):
         return
 
-    if not allow_unrestricted_output:
+    if refuse_unrestricted_output:
         fail(
             "Input PDF is encrypted or owner-restricted. This script cannot preserve "
-            "PDF encryption or permission restrictions in the output. Pass "
-            "--allow-unrestricted-output if you intentionally want to create an "
-            "unrestricted output PDF."
+            "PDF encryption or permission restrictions in the output."
         )
 
     try:
@@ -416,7 +422,7 @@ def append_pdf_page(
     output_pdf: Path,
     max_pdf_pages: int,
     overwrite: bool,
-    allow_unrestricted_output: bool,
+    refuse_unrestricted_output: bool,
 ) -> int:
     """Append the generated image page PDF to the source PDF."""
 
@@ -428,7 +434,7 @@ def append_pdf_page(
     except Exception as exc:
         fail(f"Could not read PDF input: {exc}")
 
-    decrypt_reader_if_needed(source_reader, source_pdf, allow_unrestricted_output)
+    decrypt_reader_if_needed(source_reader, source_pdf, refuse_unrestricted_output)
 
     source_page_count = len(source_reader.pages)
     if source_page_count < 1:
@@ -503,7 +509,7 @@ def main() -> None:
             output_path,
             args.max_pdf_pages,
             args.overwrite,
-            args.allow_unrestricted_output,
+            args.refuse_unrestricted_output,
         )
 
     print(f"wrote: {output_path}")
