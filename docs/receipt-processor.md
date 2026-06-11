@@ -11,6 +11,9 @@ Process receipt images directly with the configured local vision model:
 receipt-process path/to/receipts
 ```
 
+For best results, use one receipt per image. The current receipt extraction
+flow appears to handle only one receipt from each image reliably.
+
 By default this writes:
 
 - `daily_totals.json`
