@@ -234,6 +234,7 @@ def post_json(
     started_at = time.monotonic()
     with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
         body = response.read()
+    # urlopen's timeout is per socket operation, so keep a simple total-time guard too.
     if time.monotonic() - started_at > timeout_seconds:
         return {}
     data = json.loads(body.decode("utf-8"))
@@ -250,6 +251,7 @@ def validate_local_base_url(base_url: str, *, allow_remote: bool = False) -> Non
     if parsed.hostname == "localhost":
         return
     try:
+        # Hostnames other than localhost are rejected unless they parse as private IPs.
         address = ipaddress.ip_address(parsed.hostname)
     except ValueError as exc:
         raise ValueError("Vision LLM base URL must use localhost or an IP address unless remote URLs are allowed.") from exc

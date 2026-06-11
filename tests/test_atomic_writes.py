@@ -20,6 +20,7 @@ def load_script_module(name: str, filename: str) -> object:
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load {filename}")
     module = importlib.util.module_from_spec(spec)
+    # Dataclasses resolve module metadata through sys.modules while the script loads.
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module

@@ -353,6 +353,7 @@ def make_contained_image_pdf(
             if image.mode in ("RGBA", "LA") or (
                 image.mode == "P" and "transparency" in image.info
             ):
+                # PDF output has no alpha channel here, so flatten transparent pixels to white.
                 background = Image.new("RGB", image.size, "white")
                 alpha = image.convert("RGBA").split()[-1]
                 background.paste(image.convert("RGB"), mask=alpha)
@@ -441,6 +442,7 @@ def append_pdf_page(
 ) -> int:
     """Append the generated image page PDF under a subprocess timeout boundary."""
 
+    # Keep pypdf parsing in a child process so malformed PDFs cannot stall the CLI forever.
     result_queue: multiprocessing.Queue = multiprocessing.Queue(maxsize=1)
     process = multiprocessing.Process(
         target=append_pdf_page_worker,
@@ -500,6 +502,7 @@ def append_pdf_page_worker(
             refuse_unrestricted_output,
         )
     except SystemExit as exc:
+        # Preserve deliberate fail() exits from the worker as normal CLI exits.
         result_queue.put(("system_exit", exc.code if isinstance(exc.code, int) else 1))
     except BaseException as exc:
         result_queue.put(("error", f"Could not append PDF page: {exc}"))

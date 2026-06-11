@@ -22,6 +22,7 @@ DEFAULT_DETAILS_PATH = Path("receipt_results.json")
 
 
 def main() -> None:
+    """Run the receipt processor command line interface."""
     load_env_file()
     parser = argparse.ArgumentParser(description="Extract receipt totals and aggregate spend by day.")
     parser.add_argument("input_dir", type=Path, help="Directory containing receipt images.")
@@ -134,6 +135,7 @@ def _format_day_label(value: str) -> str:
 
 
 def _build_vision_extractor(args: argparse.Namespace) -> VisionExtractor:
+    """Build the configured vision backend from CLI args and environment values."""
     if args.vision_llm_provider == "command":
         if not args.vision_llm_command:
             raise SystemExit("--vision-llm-command is required when --vision-llm-provider=command")
