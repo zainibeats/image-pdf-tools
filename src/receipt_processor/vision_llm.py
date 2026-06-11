@@ -103,10 +103,13 @@ class OllamaVisionExtractor:
                 "format": "json",
                 "options": {"temperature": 0, "num_predict": 200},
             }
-            data = post_json(f"{self._base_url}/api/generate", payload, timeout_seconds=self._timeout_seconds)
+            data = post_json(_ollama_generate_url(self._base_url), payload, timeout_seconds=self._timeout_seconds)
         except (OSError, ValueError, urllib.error.URLError):
             return None
-        return parse_vision_json(str(data.get("response", "")))
+        extraction = parse_vision_json(str(data.get("response", "")))
+        if extraction is not None:
+            return extraction
+        return parse_vision_json(str(data.get("thinking", "")))
 
 
 class OpenAICompatibleVisionExtractor:
@@ -239,6 +242,14 @@ def post_json(
         return {}
     data = json.loads(body.decode("utf-8"))
     return data if isinstance(data, dict) else {}
+
+
+def _ollama_generate_url(base_url: str) -> str:
+    """Return the Ollama generate endpoint for a server root or endpoint URL."""
+    stripped = base_url.rstrip("/")
+    if stripped.endswith("/api/generate"):
+        return stripped
+    return f"{stripped}/api/generate"
 
 
 def validate_local_base_url(base_url: str, *, allow_remote: bool = False) -> None:
