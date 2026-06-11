@@ -32,14 +32,14 @@ VENV_PY=".venv/bin/python"
 find_python() {
     for candidate in python3 python; do
         if command -v "$candidate" >/dev/null 2>&1; then
-            if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+            if "$candidate" -c 'import sys; raise SystemExit(0 if (3, 12) <= sys.version_info < (3, 14) else 1)' >/dev/null 2>&1; then
                 PYTHON_CMD=$candidate
                 return 0
             fi
         fi
     done
 
-    echo "ERROR: Python 3.10 or newer was not found."
+    echo "ERROR: Python 3.12 or 3.13 was not found."
     echo "Install Python from https://www.python.org/downloads/"
     return 1
 }
@@ -57,7 +57,7 @@ ensure_venv() {
     if ! "$PYTHON_CMD" -m venv .venv; then
         echo
         echo "ERROR: Could not create the Python environment."
-        echo "Install Python 3.10 or newer from https://www.python.org/downloads/"
+        echo "Install Python 3.12 or 3.13 from https://www.python.org/downloads/"
         return 1
     fi
 }

@@ -20,6 +20,21 @@ python -m pip install -e ".[dev]"
 Copy `.env.example` to `.env` and point it at your local AI server if you use
 `receipt-process`.
 
+## Menu Wrappers
+
+For manual use without remembering commands, run the wrapper for your platform
+from the project folder:
+
+```bash
+./run-image-pdf-tools.sh
+```
+
+On Windows, double-click `run-image-pdf-tools.bat`.
+
+The wrappers create a local `.venv`, install `requirements.txt`, and show a
+menu for making an image grid, appending an image to a PDF, or doing both in one
+flow. They require Python 3.12 or 3.13.
+
 ## Tools
 
 - [`scripts/make-image-grid.py`](docs/image-grid.md): combines HEIC, HEIF, JPG,

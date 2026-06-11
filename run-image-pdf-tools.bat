@@ -42,7 +42,7 @@ if not exist "%VENV_PY%" (
     if errorlevel 1 (
         echo.
         echo ERROR: Could not create the Python environment.
-        echo Install Python 3.10 or newer from https://www.python.org/downloads/windows/
+        echo Install Python 3.12 or 3.13 from https://www.python.org/downloads/windows/
         echo During install, select "Add python.exe to PATH".
         echo.
         pause
@@ -184,19 +184,19 @@ exit /b 0
 
 :find_python
 set "PYTHON_CMD="
-py -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
+py -3 -c "import sys; raise SystemExit(0 if (3, 12) <= sys.version_info < (3, 14) else 1)" >nul 2>nul
 if not errorlevel 1 (
     set "PYTHON_CMD=py -3"
     exit /b 0
 )
 
-python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
+python -c "import sys; raise SystemExit(0 if (3, 12) <= sys.version_info < (3, 14) else 1)" >nul 2>nul
 if not errorlevel 1 (
     set "PYTHON_CMD=python"
     exit /b 0
 )
 
-echo ERROR: Python 3.10 or newer was not found.
+echo ERROR: Python 3.12 or 3.13 was not found.
 echo Install Python from https://www.python.org/downloads/windows/
 echo During install, select "Add python.exe to PATH".
 echo.
