@@ -4,6 +4,7 @@ import importlib.util
 import io
 import sys
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
@@ -12,7 +13,10 @@ from unittest.mock import patch
 
 
 def load_script_module(name: str, filename: str) -> object:
-    spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(filename))
+    """Load a script with a hyphenated filename as an importable test module."""
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / filename
+    spec = importlib.util.spec_from_file_location(name, script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load {filename}")
     module = importlib.util.module_from_spec(spec)
@@ -26,6 +30,8 @@ make_image_grid = load_script_module("make_image_grid", "make-image-grid.py")
 
 
 class BytesWriter:
+    """Minimal PDF-writer stand-in for atomic write tests."""
+
     def __init__(self, data: bytes) -> None:
         self.data = data
 
@@ -34,6 +40,8 @@ class BytesWriter:
 
 
 class BytesImage:
+    """Minimal Pillow-image stand-in for atomic save tests."""
+
     def __init__(self, data: bytes) -> None:
         self.data = data
 
@@ -42,6 +50,8 @@ class BytesImage:
 
 
 class EmptyPasswordEncryptedReader:
+    """Reader stand-in for an owner-restricted PDF opened with an empty password."""
+
     is_encrypted = True
 
     def __init__(self) -> None:
@@ -53,6 +63,8 @@ class EmptyPasswordEncryptedReader:
 
 
 class FakePdfReader:
+    """Small pypdf reader stand-in with a configurable page count."""
+
     def __init__(self, page_count: int) -> None:
         self.is_encrypted = False
         self.metadata: dict[str, str] = {}
@@ -60,6 +72,8 @@ class FakePdfReader:
 
 
 class FakePdfWriter:
+    """Small pypdf writer stand-in that records added pages and metadata."""
+
     def __init__(self) -> None:
         self.pages: list[object] = []
 
@@ -72,6 +86,8 @@ class FakePdfWriter:
 
 class AtomicWriteTests(unittest.TestCase):
     def assert_exits_with_error(self, callback: object, expected: str) -> None:
+        """Run a failing callback and assert its stderr contains expected text."""
+
         stderr = io.StringIO()
         with redirect_stderr(stderr), self.assertRaises(SystemExit):
             callback()
@@ -297,12 +313,14 @@ class AtomicWriteTests(unittest.TestCase):
                 max_image_pixels=80_000_000,
                 max_pdf_pages=10,
                 max_pdf_mb=25,
+                pdf_timeout=15.0,
             )
 
             early_cases = [
                 ("max_image_pixels", 0, "--max-image-pixels must be positive"),
                 ("max_pdf_pages", 0, "--max-pdf-pages must be positive"),
                 ("max_pdf_mb", 0, "--max-pdf-mb must be positive"),
+                ("pdf_timeout", 0, "--pdf-timeout must be positive"),
             ]
             for field, value, expected in early_cases:
                 with self.subTest(field=field):
@@ -400,7 +418,7 @@ class AtomicWriteTests(unittest.TestCase):
             patch.object(append_image_page, "write_pdf_atomically") as write_pdf,
         ):
             self.assert_exits_with_error(
-                lambda: append_image_page.append_pdf_page(
+                lambda: append_image_page.append_pdf_page_unbounded(
                     Path("input.pdf"),
                     Path("image-page.pdf"),
                     Path("output.pdf"),
@@ -412,6 +430,25 @@ class AtomicWriteTests(unittest.TestCase):
             )
 
         write_pdf.assert_not_called()
+
+    def test_append_times_out_stalled_pdf_worker(self) -> None:
+        def slow_append(*_args: object) -> int:
+            time.sleep(1)
+            return 1
+
+        with patch.object(append_image_page, "append_pdf_page_unbounded", slow_append):
+            self.assert_exits_with_error(
+                lambda: append_image_page.append_pdf_page(
+                    Path("input.pdf"),
+                    Path("image-page.pdf"),
+                    Path("output.pdf"),
+                    max_pdf_pages=10,
+                    overwrite=False,
+                    refuse_unrestricted_output=False,
+                    pdf_timeout_seconds=0.01,
+                ),
+                "exceeded --pdf-timeout",
+            )
 
     def test_grid_refuses_output_pixel_count_above_configured_limit(self) -> None:
         class FakeImageModule:

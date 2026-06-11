@@ -286,6 +286,7 @@ def preflight_images(
         try:
             with Image.open(image_path) as image:
                 enforce_image_pixel_limit(image, image_path, max_image_pixels)
+                # verify() checks file structure without decoding the full image now.
                 image.verify()
         except Exception as exc:
             skipped_images.append(SkippedImage(image_path, str(exc)))
@@ -325,6 +326,7 @@ def publish_temp_file(temp_path: Path, destination: Path, overwrite: bool) -> No
         temp_path.replace(destination)
         return
 
+    # A hard link creates the destination only if it does not already exist.
     try:
         os.link(temp_path, destination)
     except FileExistsError:
@@ -438,6 +440,7 @@ def make_grid(
 
     pasted_count = 0
     for image_path in images:
+        # Use pasted_count so images skipped during decoding do not leave holes in the grid.
         row = pasted_count // size.columns
         column = pasted_count % size.columns
         try:

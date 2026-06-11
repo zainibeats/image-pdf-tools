@@ -1,5 +1,7 @@
 # Image PDF Tools
 
+> **Note**: This project contains AI-generated code
+
 Small Python tools for preparing image-based PDF attachments. Each script can be
 used on its own, but they also work well together for weekly receipt workflows:
 collect receipt images, turn them into one grid image, then attach that image to
@@ -9,10 +11,18 @@ Original images and PDFs are always preserved.
 
 ## Tools
 
-- `make-image-grid.py`: combines HEIC, HEIF, JPG, JPEG, and PNG images into one
+- `scripts/make-image-grid.py`: combines HEIC, HEIF, JPG, JPEG, and PNG images into one
   balanced JPG grid. Default image limit is 24.
-- `append-image-page.py`: appends a JPG/JPEG image as a US Letter page at the
-  end of an existing PDF. Default input PDF limits are 10 pages and 25 MiB. 
+- `scripts/append-image-page.py`: appends a JPG/JPEG image as a US Letter page at the
+  end of an existing PDF. Default input PDF limits are 10 pages, 25 MiB, and a
+  15-second PDF parsing/rewrite timeout.
+
+## Repository Layout
+
+- `scripts/`: command line tools.
+- `tests/`: unit tests.
+- `docs/`: supporting project notes and findings.
+- `run-image-pdf-tools.sh` and `run-image-pdf-tools.bat`: guided launchers.
 
 ## Dependencies
 
@@ -24,6 +34,14 @@ Original images and PDFs are always preserved.
 ## Install
 
 Install dependencies in a standard Python virtual environment.
+
+For a guided setup and menu, Windows users can run `run-image-pdf-tools.bat`.
+macOS and Linux users can run:
+
+```bash
+chmod +x run-image-pdf-tools.sh
+./run-image-pdf-tools.sh
+```
 
 **Windows PowerShell:**
 
@@ -53,7 +71,7 @@ python -m pip install -r requirements.txt
 Create a grid from a folder of images:
 
 ```bash
-python make-image-grid.py ~/Pictures/images
+python scripts/make-image-grid.py ~/Pictures/images
 ```
 
 This writes `image-grid.jpg` inside the input folder by default.
@@ -61,7 +79,7 @@ This writes `image-grid.jpg` inside the input folder by default.
 Append that image to an existing PDF:
 
 ```bash
-python append-image-page.py ~/Pictures/images/image-grid.jpg --pdf ~/Downloads/input.pdf
+python scripts/append-image-page.py ~/Pictures/images/image-grid.jpg --pdf ~/Downloads/input.pdf
 ```
 
 This writes a PDF next to the image by default:
@@ -76,29 +94,32 @@ This writes a PDF next to the image by default:
 
 ```bash
 # Choosing the grid output name and path
-python make-image-grid.py ~/Pictures/images -o named-image-grid.jpg
+python scripts/make-image-grid.py ~/Pictures/images -o named-image-grid.jpg
 
 # Raise the batch limit for a larger image set:
-python make-image-grid.py ~/Pictures/images --max-images 60
+python scripts/make-image-grid.py ~/Pictures/images --max-images 60
 
 # Raise the output pixel limit for larger cells or batches:
-python make-image-grid.py ~/Pictures/images --max-output-pixels 100000000
+python scripts/make-image-grid.py ~/Pictures/images --max-output-pixels 100000000
 ```
 
 **Append Image to PDF:**
 
 ```bash
 # Choosing the final PDF output name and path
-python append-image-page.py ~/Pictures/images/image-grid.jpg --pdf ~/Downloads/input.pdf -o ~/Pictures/images/final.pdf
+python scripts/append-image-page.py ~/Pictures/images/image-grid.jpg --pdf ~/Downloads/input.pdf -o ~/Pictures/images/final.pdf
 
 # Raise PDF page limit
-python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --max-pdf-pages 20
+python scripts/append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --max-pdf-pages 20
 
 # Raise PDF file-size limit
-python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --max-pdf-mb 50
+python scripts/append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --max-pdf-mb 50
+
+# Raise PDF parsing/rewrite timeout for an unusually complex input
+python scripts/append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --pdf-timeout 30
 
 # Refuse owner-restricted PDFs instead of producing unrestricted output
-python append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --refuse-unrestricted-output
+python scripts/append-image-page.py ~/Desktop/image-grid.jpg --pdf ~/Downloads/input.pdf --refuse-unrestricted-output
 ```
 
 _Existing output files are not replaced unless `--overwrite` is passed._
@@ -117,8 +138,8 @@ to stop instead. PDFs that require a user password are not supported.
 
 ## Behavior
 
-- `make-image-grid.py` accepts `.heic`, `.heif`, `.jpg`, `.jpeg`, and `.png` images up to the default safety limit of 24 images.
-- `make-image-grid.py` only scans files directly inside the input folder. Subfolders are ignored.
+- `scripts/make-image-grid.py` accepts `.heic`, `.heif`, `.jpg`, `.jpeg`, and `.png` images up to the default safety limit of 24 images.
+- `scripts/make-image-grid.py` only scans files directly inside the input folder. Subfolders are ignored.
 - Unreadable image files are skipped and reported instead of stopping the entire
   grid job. If no readable images remain, the script fails.
 - Original input images are left untouched.
@@ -126,9 +147,9 @@ to stop instead. PDFs that require a user password are not supported.
 - The default grid output limit is 50,000,000 pixels. Larger grids require an explicit `--max-output-pixels` value.
 - JPEG output optimization is off by default to reduce peak memory use. Pass `--optimize` to request a smaller optimized file when extra memory use is acceptable.
 - With 2 images, the grid is 2 rows by 1 column, so the output is portrait-oriented.
-- `append-image-page.py` keeps the image aspect ratio and centers it on a white
+- `scripts/append-image-page.py` keeps the image aspect ratio and centers it on a white
   US Letter page.
-- `append-image-page.py` preserves source pages and simple string metadata, but
+- `scripts/append-image-page.py` preserves source pages and simple string metadata, but
   it does not preserve encryption, permission restrictions, signatures, forms,
   outlines, attachments, document-level JavaScript, or tagged-PDF structure.
 - Output paths are checked before processing starts. Unusual destinations
@@ -136,4 +157,5 @@ to stop instead. PDFs that require a user password are not supported.
 - The scripts fail when inputs exceed configured safety limits. Use
   `--max-images`, `--max-image-pixels`, `--max-output-pixels`, or
   `--max-pdf-pages` to raise a limit for larger inputs. Use `--max-pdf-mb` to
-  allow a larger PDF file before parsing.
+  allow a larger PDF file before parsing. Use `--pdf-timeout` to allow more
+  time for PDF parsing and rewriting before the worker process is stopped.

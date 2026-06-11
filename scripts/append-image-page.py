@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import multiprocessing
 import os
+import queue
 import sys
 import tempfile
 from pathlib import Path
@@ -15,6 +17,7 @@ SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
 DEFAULT_MAX_IMAGE_PIXELS = 80_000_000
 DEFAULT_MAX_PDF_PAGES = 10
 DEFAULT_MAX_PDF_BYTES = 25 * 1024 * 1024
+DEFAULT_PDF_TIMEOUT_SECONDS = 15.0
 WINDOWS_RESERVED_NAMES = {
     "CON",
     "PRN",
@@ -102,6 +105,15 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Maximum input PDF file size in MiB before parsing. "
             f"Defaults to {DEFAULT_MAX_PDF_BYTES // (1024 * 1024)}."
+        ),
+    )
+    parser.add_argument(
+        "--pdf-timeout",
+        type=float,
+        default=DEFAULT_PDF_TIMEOUT_SECONDS,
+        help=(
+            "Maximum seconds allowed for PDF parsing and rewriting before the "
+            f"worker process is stopped. Defaults to {DEFAULT_PDF_TIMEOUT_SECONDS:g}."
         ),
     )
     return parser.parse_args()
@@ -298,6 +310,7 @@ def publish_temp_file(temp_path: Path, destination: Path, overwrite: bool) -> No
         temp_path.replace(destination)
         return
 
+    # A hard link creates the destination only if it does not already exist.
     try:
         os.link(temp_path, destination)
     except FileExistsError:
@@ -399,6 +412,7 @@ def decrypt_reader_if_needed(
             "PDF encryption or permission restrictions in the output."
         )
 
+    # Empty-password decryption handles owner-restricted PDFs, but not user-locked PDFs.
     try:
         decrypt_result = reader.decrypt("")  # type: ignore[attr-defined]
     except Exception as exc:
@@ -417,6 +431,83 @@ def decrypt_reader_if_needed(
 
 
 def append_pdf_page(
+    source_pdf: Path,
+    image_page_pdf: Path,
+    output_pdf: Path,
+    max_pdf_pages: int,
+    overwrite: bool,
+    refuse_unrestricted_output: bool,
+    pdf_timeout_seconds: float,
+) -> int:
+    """Append the generated image page PDF under a subprocess timeout boundary."""
+
+    result_queue: multiprocessing.Queue = multiprocessing.Queue(maxsize=1)
+    process = multiprocessing.Process(
+        target=append_pdf_page_worker,
+        args=(
+            source_pdf,
+            image_page_pdf,
+            output_pdf,
+            max_pdf_pages,
+            overwrite,
+            refuse_unrestricted_output,
+            result_queue,
+        ),
+    )
+    process.start()
+    process.join(pdf_timeout_seconds)
+
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        fail(
+            f"PDF parsing exceeded --pdf-timeout ({pdf_timeout_seconds:g} seconds). "
+            "The input PDF may be malformed or too complex."
+        )
+
+    try:
+        status, payload = result_queue.get_nowait()
+    except queue.Empty:
+        if process.exitcode == 0:
+            fail("PDF worker finished without returning a result.")
+        fail(f"PDF worker exited unexpectedly with status {process.exitcode}.")
+
+    if status == "ok":
+        return int(payload)
+    if status == "system_exit":
+        raise SystemExit(int(payload))
+    fail(str(payload))
+
+
+def append_pdf_page_worker(
+    source_pdf: Path,
+    image_page_pdf: Path,
+    output_pdf: Path,
+    max_pdf_pages: int,
+    overwrite: bool,
+    refuse_unrestricted_output: bool,
+    result_queue: multiprocessing.Queue,
+) -> None:
+    """Run PDF parsing and rewriting in a child process."""
+
+    try:
+        page_count = append_pdf_page_unbounded(
+            source_pdf,
+            image_page_pdf,
+            output_pdf,
+            max_pdf_pages,
+            overwrite,
+            refuse_unrestricted_output,
+        )
+    except SystemExit as exc:
+        result_queue.put(("system_exit", exc.code if isinstance(exc.code, int) else 1))
+    except BaseException as exc:
+        result_queue.put(("error", f"Could not append PDF page: {exc}"))
+    else:
+        result_queue.put(("ok", page_count))
+
+
+def append_pdf_page_unbounded(
     source_pdf: Path,
     image_page_pdf: Path,
     output_pdf: Path,
@@ -453,6 +544,7 @@ def append_pdf_page(
     writer.add_page(image_reader.pages[0])
 
     if source_reader.metadata:
+        # pypdf accepts string metadata values; skip richer objects from malformed inputs.
         metadata = {
             key: value
             for key, value in source_reader.metadata.items()
@@ -476,6 +568,8 @@ def main() -> None:
         fail("--max-pdf-pages must be positive")
     if args.max_pdf_mb < 1:
         fail("--max-pdf-mb must be positive")
+    if args.pdf_timeout <= 0:
+        fail("--pdf-timeout must be positive")
 
     pdf_path = existing_file(args.pdf, "PDF")
     image_path = existing_file(args.image, "Image")
@@ -510,6 +604,7 @@ def main() -> None:
             args.max_pdf_pages,
             args.overwrite,
             args.refuse_unrestricted_output,
+            args.pdf_timeout,
         )
 
     print(f"wrote: {output_path}")
