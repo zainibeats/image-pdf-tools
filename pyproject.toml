@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "weekly-receipt-tools"
+version = "0.1.0"
+description = "Separate tools for weekly receipt image preparation, PDF attachment, and receipt total extraction."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "Pillow>=12.2.0",
+  "pillow-heif>=0.16",
+  "pypdf[crypto]>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=9.0.3",
+]
+
+[project.scripts]
+receipt-process = "receipt_processor.cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/receipt_processor"]
