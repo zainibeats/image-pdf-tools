@@ -53,6 +53,24 @@ The processor rejects remote HTTP endpoints by default so receipt images stay on
 local or private-network model servers. Pass `--vision-llm-allow-remote` only
 when sending receipt images to a remote endpoint is intentional.
 
+## Docker Model URLs
+
+When `receipt-process` runs in Docker, `127.0.0.1` is the app container, not the
+host. Use `http://host.docker.internal:8000/v1` for an OpenAI-compatible server
+running on the host machine. In Compose, set `DOCKER_RECEIPT_VISION_BASE_URL`
+when the host model server uses a different port or path.
+
+The Compose file also includes an optional Ollama sidecar. Start it with:
+
+```bash
+docker compose --profile ollama up -d ollama
+docker compose --profile ollama exec ollama ollama pull qwen3-vl:8b
+docker compose --profile ollama run --rm app-ollama receipt-process image-tests
+```
+
+`app-ollama` sets `RECEIPT_VISION_BASE_URL=http://ollama:11434` so the app
+container talks to the sidecar over the Docker network.
+
 ## Providers
 
 - `openai-compatible`: calls a local OpenAI-compatible chat completions

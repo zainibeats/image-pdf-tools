@@ -1,0 +1,47 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.12}
+    image: weekly-receipt-tools:local
+    working_dir: /work
+    environment:
+      RECEIPT_VISION_PROVIDER: ${DOCKER_RECEIPT_VISION_PROVIDER:-openai-compatible}
+      RECEIPT_VISION_BASE_URL: ${DOCKER_RECEIPT_VISION_BASE_URL:-http://host.docker.internal:8000/v1}
+      RECEIPT_VISION_MODEL: ${RECEIPT_VISION_MODEL:-mistralai/ministral-3-3b}
+      RECEIPT_VISION_API_KEY: ${RECEIPT_VISION_API_KEY:-}
+      RECEIPT_VISION_TIMEOUT: ${RECEIPT_VISION_TIMEOUT:-90}
+      RECEIPT_VISION_MAX_IMAGE_EDGE: ${RECEIPT_VISION_MAX_IMAGE_EDGE:-768}
+      RECEIPT_VISION_ALLOW_REMOTE: ${RECEIPT_VISION_ALLOW_REMOTE:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/work
+
+  app-ollama:
+    extends:
+      service: app
+    profiles:
+      - ollama
+    depends_on:
+      - ollama
+    environment:
+      RECEIPT_VISION_PROVIDER: ollama
+      RECEIPT_VISION_BASE_URL: http://ollama:11434
+      RECEIPT_VISION_MODEL: ${OLLAMA_MODEL:-qwen3-vl:8b}
+      RECEIPT_VISION_TIMEOUT: ${OLLAMA_TIMEOUT:-180}
+      RECEIPT_VISION_MAX_IMAGE_EDGE: ${RECEIPT_VISION_MAX_IMAGE_EDGE:-768}
+      RECEIPT_VISION_ALLOW_REMOTE: "false"
+
+  ollama:
+    image: ollama/ollama:${OLLAMA_TAG:-latest}
+    profiles:
+      - ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
+volumes:
+  ollama-data:

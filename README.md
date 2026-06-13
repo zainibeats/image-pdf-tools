@@ -20,6 +20,43 @@ python -m pip install -e ".[dev]"
 Copy `.env.example` to `.env` and point it at your local AI server if you use
 `receipt-process`.
 
+## Docker
+
+Build a reproducible Python 3.12 image with Pillow, pillow-heif, and the project
+dependencies installed:
+
+```bash
+docker compose build app
+docker compose run --rm app python -m pytest
+```
+
+Run the receipt processor against a model server on the host machine:
+
+```bash
+docker compose run --rm app receipt-process image-tests
+```
+
+Inside the container, `host.docker.internal` points back to the host. The
+Compose defaults use `http://host.docker.internal:8000/v1` for an
+OpenAI-compatible local server. Set `DOCKER_RECEIPT_VISION_BASE_URL` in `.env`
+when your host model server uses a different port.
+
+To run with the optional Ollama sidecar:
+
+```bash
+docker compose --profile ollama up -d ollama
+docker compose --profile ollama run --rm app-ollama receipt-process image-tests
+```
+
+Pull the model into the sidecar before processing receipts:
+
+```bash
+docker compose --profile ollama exec ollama ollama pull qwen3-vl:8b
+```
+
+Set `PYTHON_VERSION`, `OLLAMA_TAG`, or `OLLAMA_MODEL` in `.env` when you need
+to pin different container or model versions.
+
 ## Menu Wrappers
 
 For manual use without remembering commands, run the wrapper for your platform

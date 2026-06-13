@@ -1,0 +1,14 @@
+.git/
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.DS_Store
+Thumbs.db
+.env
+daily_totals.json
+receipt_results.json
+daily_totals.csv
+weekly_totals.json
+test-receipts/
+image-tests/
