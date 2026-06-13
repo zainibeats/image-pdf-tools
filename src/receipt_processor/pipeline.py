@@ -8,7 +8,7 @@ from receipt_processor.models import ExtractedReceipt, ProcessingFailure
 from receipt_processor.validation import is_valid_receipt
 from receipt_processor.vision_llm import VisionExtractor
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
+IMAGE_EXTENSIONS = {".heic", ".heif", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
 
 
 def process_directory(

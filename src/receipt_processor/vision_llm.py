@@ -9,11 +9,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Protocol
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 VISION_PROMPT = """Extract the transaction date and final charged total from this receipt image.
 Return strict JSON only.
@@ -21,6 +22,8 @@ Use null when a field is not visible.
 Do not infer values that are not present on the receipt.
 Expected shape: {"date": "YYYY-MM-DD", "total": 12.34, "currency": "USD", "merchant": "store", "confidence": 0.82}
 """
+
+HEIF_EXTENSIONS = {".heic", ".heif"}
 
 
 @dataclass(frozen=True)
@@ -183,13 +186,30 @@ def encode_image(image_path: Path, *, max_edge: int) -> EncodedImage:
     if max_edge <= 0:
         raise ValueError("max_edge must be greater than zero.")
 
+    if image_path.suffix.lower() in HEIF_EXTENSIONS:
+        _register_heif_opener()
+
     with Image.open(image_path) as image:
+        image = ImageOps.exif_transpose(image)
         image = image.convert("RGB")
         image.thumbnail((max_edge, max_edge))
         buffer = BytesIO()
         image.save(buffer, format="JPEG", quality=85, optimize=True)
 
     return EncodedImage(data=base64.b64encode(buffer.getvalue()).decode("ascii"), media_type="image/jpeg")
+
+
+@lru_cache(maxsize=1)
+def _register_heif_opener() -> None:
+    """Register HEIC/HEIF support for Pillow when those inputs are used."""
+    try:
+        from pillow_heif import register_heif_opener
+    except ModuleNotFoundError as exc:
+        raise ValueError(
+            "HEIC/HEIF images require pillow-heif. Run: python -m pip install -r requirements.txt"
+        ) from exc
+
+    register_heif_opener()
 
 
 def parse_vision_json(value: str) -> VisionExtraction | None:

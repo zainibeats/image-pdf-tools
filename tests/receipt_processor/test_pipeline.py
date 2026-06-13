@@ -34,6 +34,30 @@ def test_pipeline_uses_vision_llm(tmp_path) -> None:
     assert [path.name for path in vision.calls] == ["a.jpg", "b.jpg"]
 
 
+def test_pipeline_includes_heic_and_heif_images(tmp_path) -> None:
+    receipt_dir = tmp_path / "receipts"
+    receipt_dir.mkdir()
+    (receipt_dir / "a.HEIC").write_bytes(b"fake")
+    (receipt_dir / "b.heif").write_bytes(b"fake")
+    (receipt_dir / "c.txt").write_text("not an image", encoding="utf-8")
+    vision = StubVisionExtractor(
+        {
+            "a.HEIC": VisionExtraction(date="2026-06-01", total=12.34, confidence=0.8),
+            "b.heif": VisionExtraction(date="2026-06-02", total=7.66, confidence=0.7),
+        }
+    )
+
+    daily_totals, receipts, failures = process_directory(receipt_dir, vision)
+
+    assert daily_totals == {"2026-06-01": 12.34, "2026-06-02": 7.66}
+    assert [receipt.file for receipt in receipts] == [
+        str(receipt_dir / "a.HEIC"),
+        str(receipt_dir / "b.heif"),
+    ]
+    assert failures == []
+    assert [path.name for path in vision.calls] == ["a.HEIC", "b.heif"]
+
+
 def test_pipeline_rejects_invalid_vision_results(tmp_path) -> None:
     receipt_dir = tmp_path / "receipts"
     receipt_dir.mkdir()

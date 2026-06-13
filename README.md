@@ -42,7 +42,8 @@ flow. They require Python 3.12 or 3.13.
 - [`scripts/append-image-page.py`](docs/append-image-page.md): appends a
   JPG/JPEG image as a US Letter page at the end of an existing PDF.
 - [`receipt-process`](docs/receipt-processor.md): extracts receipt dates and
-  totals with a configured local vision model.
+  totals from HEIC, HEIF, JPG, JPEG, PNG, TIFF, BMP, and WebP images with a
+  configured local vision model.
 
 ## Quick Examples
 

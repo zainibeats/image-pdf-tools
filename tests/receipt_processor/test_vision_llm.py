@@ -5,6 +5,27 @@ from receipt_processor import vision_llm
 from receipt_processor.vision_llm import EncodedImage, OllamaVisionExtractor
 
 
+class FakePillowImage:
+    def __enter__(self) -> "FakePillowImage":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        return None
+
+    def convert(self, mode: str) -> "FakePillowImage":
+        assert mode == "RGB"
+        return self
+
+    def thumbnail(self, size: tuple[int, int]) -> None:
+        assert size == (768, 768)
+
+    def save(self, buffer: object, *, format: str, quality: int, optimize: bool) -> None:
+        assert format == "JPEG"
+        assert quality == 85
+        assert optimize is True
+        buffer.write(b"jpeg")
+
+
 def test_ollama_accepts_server_root_url(monkeypatch) -> None:
     seen: dict[str, Any] = {}
 
@@ -65,3 +86,29 @@ def test_ollama_parses_thinking_field_when_response_is_empty(monkeypatch) -> Non
     assert result.total == 12.34
     assert result.currency == "USD"
     assert result.merchant == "Store"
+
+
+def test_encode_image_registers_heif_support_for_heic(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(vision_llm, "_register_heif_opener", lambda: calls.append("registered"))
+    monkeypatch.setattr(vision_llm.ImageOps, "exif_transpose", lambda image: image)
+    monkeypatch.setattr(vision_llm.Image, "open", lambda image_path: FakePillowImage())
+
+    encoded = vision_llm.encode_image(Path("receipt.HEIC"), max_edge=768)
+
+    assert calls == ["registered"]
+    assert encoded == EncodedImage("anBlZw==", "image/jpeg")
+
+
+def test_encode_image_does_not_register_heif_support_for_jpeg(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(vision_llm, "_register_heif_opener", lambda: calls.append("registered"))
+    monkeypatch.setattr(vision_llm.ImageOps, "exif_transpose", lambda image: image)
+    monkeypatch.setattr(vision_llm.Image, "open", lambda image_path: FakePillowImage())
+
+    encoded = vision_llm.encode_image(Path("receipt.jpg"), max_edge=768)
+
+    assert calls == []
+    assert encoded == EncodedImage("anBlZw==", "image/jpeg")

@@ -11,6 +11,9 @@ Process receipt images directly with the configured local vision model:
 receipt-process path/to/receipts
 ```
 
+Supported input formats include HEIC, HEIF, JPG, JPEG, PNG, TIFF, BMP, and WebP.
+Images are resized and sent to the vision model as JPEG payloads.
+
 For best results, use one receipt per image. The current receipt extraction
 flow appears to handle only one receipt from each image reliably.
 
